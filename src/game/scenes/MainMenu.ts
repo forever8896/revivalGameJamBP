@@ -1,76 +1,96 @@
-import { type GameObjects, Scene } from 'phaser';
-
+import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
 
-export class MainMenu extends Scene
-{
-    background: GameObjects.Image;
-    logo: GameObjects.Image;
-    title: GameObjects.Text;
-    logoTween: Phaser.Tweens.Tween | null;
+export class MainMenu extends Scene {
+    private grid: boolean[][];
+    private cellSize: number = 10;
+    private graphics: Phaser.GameObjects.Graphics;
 
-    constructor ()
-    {
+    constructor() {
         super('MainMenu');
     }
 
-    create ()
-    {
-        this.background = this.add.image(512, 384, 'background');
+    create() {
+        const { width, height } = this.scale;
 
-        this.logo = this.add.image(512, 300, 'logo').setDepth(100);
+        // Set background color
+        this.cameras.main.setBackgroundColor('#0a0e17');
 
-        this.title = this.add.text(512, 460, 'Main Menu', {
-            fontFamily: 'Arial Black', fontSize: 38, color: '#ffffff',
-            stroke: '#000000', strokeThickness: 8,
-            align: 'center'
-        }).setOrigin(0.5).setDepth(100);
+        // Initialize the Game of Life grid
+        this.initializeGrid(width, height);
+
+        // Create graphics object for drawing cells
+        this.graphics = this.add.graphics();
+
+        // Start the Game of Life simulation
+        this.time.addEvent({
+            delay: 200,
+            callback: this.updateGrid,
+            callbackScope: this,
+            loop: true
+        });
+
+        // Listen for the start game event from the Svelte component
+        EventBus.on('startGame', this.changeScene, this);
 
         EventBus.emit('current-scene-ready', this);
     }
-    
-    changeScene ()
-    {
-        if (this.logoTween)
-        {
-            this.logoTween.stop();
-            this.logoTween = null;
-        }
 
-        this.scene.start('Game');
+    initializeGrid(width: number, height: number) {
+        const cols = Math.ceil(width / this.cellSize);
+        const rows = Math.ceil(height / this.cellSize);
+        this.grid = Array(rows).fill(null).map(() => 
+            Array(cols).fill(null).map(() => Math.random() < 0.2)
+        );
     }
 
-    moveLogo (vueCallback: ({ x, y }: { x: number, y: number }) => void)
-    {
-        if (this.logoTween)
-        {
-            if (this.logoTween.isPlaying())
-            {
-                this.logoTween.pause();
-            }
-            else
-            {
-                this.logoTween.play();
-            }
-        } 
-        else
-        {
-            this.logoTween = this.tweens.add({
-                targets: this.logo,
-                x: { value: 750, duration: 3000, ease: 'Back.easeInOut' },
-                y: { value: 80, duration: 1500, ease: 'Sine.easeOut' },
-                yoyo: true,
-                repeat: -1,
-                onUpdate: () => {
-                    if (vueCallback)
-                    {
-                        vueCallback({
-                            x: Math.floor(this.logo.x),
-                            y: Math.floor(this.logo.y)
-                        });
-                    }
+    updateGrid() {
+        const newGrid = this.grid.map(arr => [...arr]);
+        for (let y = 0; y < this.grid.length; y++) {
+            for (let x = 0; x < this.grid[y].length; x++) {
+                const neighbors = this.countNeighbors(x, y);
+                if (this.grid[y][x]) {
+                    newGrid[y][x] = neighbors === 2 || neighbors === 3;
+                } else {
+                    newGrid[y][x] = neighbors === 3;
                 }
-            });
+            }
         }
+        this.grid = newGrid;
+        this.drawGrid();
+    }
+
+    countNeighbors(x: number, y: number): number {
+        let count = 0;
+        for (let i = -1; i <= 1; i++) {
+            for (let j = -1; j <= 1; j++) {
+                if (i === 0 && j === 0) continue;
+                const newY = y + i;
+                const newX = x + j;
+                if (newY >= 0 && newY < this.grid.length && newX >= 0 && newX < this.grid[0].length) {
+                    count += this.grid[newY][newX] ? 1 : 0;
+                }
+            }
+        }
+        return count;
+    }
+
+    drawGrid() {
+        this.graphics.clear();
+        this.graphics.fillStyle(0x00ff00, 0.3);
+        for (let y = 0; y < this.grid.length; y++) {
+            for (let x = 0; x < this.grid[y].length; x++) {
+                if (this.grid[y][x]) {
+                    this.graphics.fillRect(x * this.cellSize, y * this.cellSize, this.cellSize, this.cellSize);
+                }
+            }
+        }
+    }
+
+    changeScene() {
+        this.cameras.main.fade(500, 0, 0, 0);
+        this.time.delayedCall(500, () => {
+            this.scene.start('Game');
+        });
     }
 }
