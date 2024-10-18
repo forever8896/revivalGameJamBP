@@ -124,10 +124,11 @@
             <ul>
                 <li>Press SPACE to toggle simulation on and off.</li>
                 <li>The game starts with 3 pulsars, as your base.</li>
-                <li>Every pulsar generates 1 cell every 10 generations.</li>
+                <li>Every pulsar generates 1 cell every 15 generations.</li>
+                <li>You start with 100 cells.</li>
                 <li>Use generated cells to build structures from the bottom panel.</li>
-                <li>Red enemy cells are emerging, trying to destroy your base.</li>
-                <li>Destroy them before they reach your base, and survive for as long as possible!</li>
+                <li>Red enemy snakes are emerging, trying to destroy your base.</li>
+                <li>Good luck</li>
             </ul>
         </div>
     {/if}
