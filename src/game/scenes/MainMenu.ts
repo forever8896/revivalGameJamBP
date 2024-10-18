@@ -14,7 +14,7 @@ export class MainMenu extends Scene {
         const { width, height } = this.scale;
 
         // Set background color
-        this.cameras.main.setBackgroundColor('#0a0e17');
+        this.cameras.main.setBackgroundColor('#000000');
 
         // Initialize the Game of Life grid
         this.initializeGrid(width, height);

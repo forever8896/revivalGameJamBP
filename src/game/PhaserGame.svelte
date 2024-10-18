@@ -29,15 +29,16 @@
     let showAboutPage = false;
     let showGameUI = false;
 
+    // Add these variables to hold the state
     let isSimulationRunning = false;
-    let cellCount = 0;
-    let stableCount = 0;
-    let remainingCells = 10;
+    let generationCount = 0;
+    let remainingCells = 0;
+    let pulsarCount = 0;
 
     onMount(() => {
+        phaserRef.game = StartGame("game-container");
         const width = window.innerWidth;
         const height = window.innerHeight;
-        phaserRef.game = StartGame("game-container", width, height);
 
         EventBus.on('current-scene-ready', (scene_instance: Scene) => {
             phaserRef.scene = scene_instance;
@@ -48,14 +49,19 @@
             showGameUI = scene_instance.scene.key === 'Game';
         });
 
+        // Add listeners to update the state
         EventBus.on('simulation-toggled', (running: boolean) => {
             isSimulationRunning = running;
         });
 
-        EventBus.on('stats-updated', (stats: { cellCount: number, stableCount: number, remainingCells: number }) => {
-            cellCount = stats.cellCount;
-            stableCount = stats.stableCount;
+        EventBus.on('stats-updated', (stats: { 
+            generationCount: number; 
+            remainingCells: number; 
+            pulsarCount: number;
+        }) => {
+            generationCount = stats.generationCount;
             remainingCells = stats.remainingCells;
+            pulsarCount = stats.pulsarCount;
         });
     });
 
@@ -74,26 +80,6 @@
         showAboutPage = false;
         showMainMenu = true;
     }
-
-    function handleToggleSimulation() {
-        if (phaserRef.scene) {
-            (phaserRef.scene as any).toggleSimulation();
-        }
-    }
-
-    function handleResetGame() {
-        if (phaserRef.scene) {
-            (phaserRef.scene as any).resetGame();
-        }
-    }
-
-    function handleReturnToMenu() {
-        if (phaserRef.game) {
-            phaserRef.game.scene.start('MainMenu');
-            showGameUI = false;
-            showMainMenu = true;
-        }
-    }
 </script>
 
 <div id="game-container"></div>
@@ -106,12 +92,9 @@
 {#if showGameUI}
     <GameUI 
         {isSimulationRunning}
-        {cellCount}
-        {stableCount}
+        {generationCount}
         {remainingCells}
-        on:toggleSimulation={handleToggleSimulation}
-        on:resetGame={handleResetGame}
-        on:returnToMenu={handleReturnToMenu}
+        {pulsarCount}
     />
 {/if}
 
