@@ -145,6 +145,7 @@ export class Game extends Scene
         super('Game');
         this.worldWidth = this.worldSize * this.cellSize;
         this.worldHeight = this.worldSize * this.cellSize;
+        this.resetGame = this.resetGame.bind(this);
         
 
         EventBus.on('toggleSimulation', this.toggleSimulation);
@@ -256,6 +257,8 @@ export class Game extends Scene
         this.backgroundMusic = this.sound.add('backgroundMusic', { loop: true });
         
         EventBus.on('toggle-music', this.toggleMusic, this);
+        EventBus.on('resetGame', this.resetGame);
+        EventBus.on('returnToMenu', this.returnToMenu);
 
         this.initializeEnemySpawnPoints();
 
@@ -547,9 +550,27 @@ export class Game extends Scene
 
 
     private returnToMenu = () => {
-        // Stop the current scene and start the menu scene
-        this.scene.stop('Game');
-        this.scene.start('Menu'); // Assuming you have a Menu scene
+        // Stop the simulation if it's running
+        if (this.isSimulationRunning) {
+            this.toggleSimulation();
+        }
+
+        // Reset the game state
+        this.resetGame();
+
+        // Stop any ongoing sounds
+        this.sound.stopAll();
+
+        // Switch to the MainMenu scene
+        this.scene.start('MainMenu');
+
+        // Use a small delay to ensure the scene has fully stopped before emitting the event
+        this.time.delayedCall(100, () => {
+            console.log("Emitting returnedToMenu event");
+            EventBus.emit('returnedToMenu'); // Changed event name
+            // Optionally retain gameDestroyed if needed elsewhere
+            // EventBus.emit('gameDestroyed');
+        });
     }
 
     handlePointerMove = (pointer: Phaser.Input.Pointer) => {
@@ -955,16 +976,22 @@ export class Game extends Scene
         }
     }
 
-    resetGame = () => {  // Use arrow function to preserve 'this' context
+    resetGame = () => {
+        console.log("Resetting game..."); // Add this line for debugging
+
+        // Stop the simulation timer
         if (this.simulationTimer) {
             this.simulationTimer.remove();
+            this.simulationTimer = null;
         }
+
+        // Reset all game state variables
         this.grid = Array(this.worldSize).fill(null).map(() => Array(this.worldSize).fill(false));
         this.enemyGrid = Array(this.worldSize).fill(null).map(() => Array(this.worldSize).fill(false));
         this.isSimulationRunning = false;
         this.cellCount = 0;
         this.stableCount = 0;
-        this.remainingCells = 100; // Reset to initial number of cells
+        this.remainingCells = 100;
         this.stableStructures = {};
         this.isGameOver = false;
         this.pulsars = [];
@@ -973,32 +1000,43 @@ export class Game extends Scene
         this.snakes = [];
         this.rotationIndex = 0;
         this.selectedStructure = null;
+        this.currentRoundGeneration = 0;
+        this.isRoundActive = false;
 
+        // Reset camera
+        this.targetZoom = 1; // Add this line
         this.camera.setZoom(1);
         this.camera.centerOn(this.worldWidth / 2, this.worldHeight / 2);
 
+        // Reset controls
+      
+
+        // Clear graphics
         this.graphics.clear();
 
-        this.initializeEnemySpawnPoints();
+        // Reinitialize game elements
+        // this.initializeEnemySpawnPoints();
         this.placeInitialPulsars();
         this.drawGrid();
         this.updateMinimapData();
-        this.emitStatsUpdate();
 
+        // Emit events to update UI
+        this.emitStatsUpdate();
         EventBus.emit('simulation-toggled', this.isSimulationRunning);
         EventBus.emit('game-reset');
         EventBus.emit('structure-deselected');
-        this.isFirstGeneration = true;
+        EventBus.emit('round-status-changed', this.isRoundActive);
 
-        // Stop the music
+        // Reset music
         if (this.backgroundMusic && this.isMusicPlaying) {
             this.backgroundMusic.stop();
             this.isMusicPlaying = false;
             EventBus.emit('music-state-changed', this.isMusicPlaying);
         }
-        this.currentRoundGeneration = 0;
-        this.isRoundActive = false;
-        EventBus.emit('round-status-changed', this.isRoundActive);
+
+        this.isFirstGeneration = true;
+
+        console.log("Game reset completed"); // Add this line for debugging
     }
 
     placeStructure(x: number, y: number, structureName: string) {

@@ -30,6 +30,9 @@ export class MainMenu extends Scene {
             loop: true
         });
 
+        // Clear any existing listeners before adding new ones
+        EventBus.removeAllListeners();
+
         // Listen for the start game event from the Svelte component
         EventBus.on('startGame', this.changeScene, this);
 

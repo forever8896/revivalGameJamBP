@@ -40,7 +40,13 @@
 
         // Add this listener to reset the game over state
         EventBus.on('game-reset', () => {
+            console.log("Game reset event received"); // Add this line for debugging
             isGameOver = false;
+            selectedStructure = null;
+            showRotationInstructions = false;
+            isRoundActive = false;
+            isRoundTransitioning = false;
+            currentRoundGeneration = 0;
         });
 
         EventBus.on('music-state-changed', (state: boolean) => {
@@ -83,8 +89,8 @@
     }
     
     function resetGame() {
+        console.log("Reset game button clicked"); // Add this line for debugging
         EventBus.emit('resetGame');
-        isGameOver = false;
     }
     
     function returnToMenu() {
@@ -494,6 +500,7 @@
 .speed-control input[type="range"] {
     width: 100%;
     -webkit-appearance: none;
+    appearance: none;
     background: rgba(0, 255, 0, 0.2);
     outline: none;
     opacity: 0.7;
@@ -537,3 +544,7 @@
 }
 
 </style>
+
+
+
+

@@ -11,7 +11,7 @@
 
 <script lang="ts">
 
-    import { onMount } from "svelte";
+    import { onMount, onDestroy } from 'svelte';
     import StartGame from "./main";
     import { EventBus } from './EventBus';
     import MainMenuUI from '../components/MainMenuUI.svelte';
@@ -35,12 +35,25 @@
     let remainingCells = 0;
     let pulsarCount = 0;
 
+    function handleReturnToMenu() {
+        console.log("Handling return to menu"); // Debugging log
+        showMainMenu = true;
+        showGameUI = false;
+        showAboutPage = false;
+        if (phaserRef.game) {
+            phaserRef.game.destroy(true);
+            phaserRef.game = null;
+        }
+        phaserRef.scene = null;
+    }
+
     onMount(() => {
         phaserRef.game = StartGame("game-container");
         const width = window.innerWidth;
         const height = window.innerHeight;
 
         EventBus.on('current-scene-ready', (scene_instance: Scene) => {
+            console.log(`Current scene ready: ${scene_instance.scene.key}`); // Debugging log
             phaserRef.scene = scene_instance;
             if(currentActiveScene) {
                 currentActiveScene(scene_instance);
@@ -62,6 +75,27 @@
             generationCount = stats.generationCount;
             remainingCells = stats.remainingCells;
             pulsarCount = stats.pulsarCount;
+        });
+
+        // Add this listener to handle returning to the main menu
+      
+
+        EventBus.on('returnToMenu', handleReturnToMenu);
+        EventBus.on('returnedToMenu', handleReturnToMenu); // Added listener
+
+        // Cleanup on destroy
+        onDestroy(() => {
+            EventBus.off('current-scene-ready', (scene_instance: Scene) => {
+                phaserRef.scene = scene_instance;
+                if(currentActiveScene) {
+                    currentActiveScene(scene_instance);
+                }
+                showMainMenu = scene_instance.scene.key === 'MainMenu';
+                showGameUI = scene_instance.scene.key === 'Game';
+            });
+            EventBus.off('returnToMenu', handleReturnToMenu);
+            EventBus.off('returnedToMenu', handleReturnToMenu); // Cleanup listener
+            // ... any other cleanup ...
         });
     });
 
