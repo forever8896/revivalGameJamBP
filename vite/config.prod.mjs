@@ -1,20 +1,12 @@
 import { defineConfig } from 'vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 
+// https://vitejs.dev/config/
 export default defineConfig({
-    plugins: [
-        sveltekit(),
-    ],
-    build: {
-        minify: 'terser',
-        terserOptions: {
-            compress: {
-                drop_console: true,
-                drop_debugger: true
-            }
-        }
-    },
-    server: {
-        port: 8080
-    }
-});
+	plugins: [
+		sveltekit(),
+	],
+	server: {
+		port: 8080
+	}
+})
