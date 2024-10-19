@@ -3,6 +3,7 @@ import { Scene } from 'phaser';
 import { structures } from '../structures';
 import { Snake } from '../Snake'; // We'll create this class
 
+
 export class Game extends Scene
 {
     private grid: boolean[][];
@@ -10,7 +11,7 @@ export class Game extends Scene
     private cellSize: number = 20;
     private worldSize: number = 200; // 100x100 grid
     private isSimulationRunning: boolean = false;
-    private simulationTimer: Phaser.Time.TimerEvent;
+    private simulationTimer: Phaser.Time.TimerEvent | null = null;
     private hoverCell: { x: number, y: number } | null = null;
     private isMouseDown: boolean = false;
     private camera: Phaser.Cameras.Scene2D.Camera;
@@ -43,17 +44,17 @@ export class Game extends Scene
     private clickSound: Phaser.Sound.BaseSound;
     private coinSound: Phaser.Sound.BaseSound;
     private timeStopSound: Phaser.Sound.BaseSound;
+    private collisionSound: Phaser.Sound.BaseSound;
     private enemyGrid: boolean[][];
     private enemyColor: number = 0xFF0000; // Red color for enemy cells
-    private enemySpawnInterval: number = 10; // Spawn enemies every 10 generations instead of 100
-    private enemySpawnChance: number = 0.3; // 30% chance to spawn an enemy at each eligible position
     private backgroundMusic: Phaser.Sound.BaseSound;
     private isMusicPlaying: boolean = false;
     private enemySpawnPoints: number[] = [];
     private enemyShootInterval: number = 100; // Shoot every 100 generations
     private maxEnemySpawnPoints: number = 5; // Maximum number of spawn points
     private snakes: Snake[] = [];
-    private snakeSpawnInterval: number = 10; // Spawn a new snake every 500 generations
+    private snakeSpawnInterval: number = 10; 
+    // private snakeSpawnInterval: number = 1; // 10X faster test
     private snakeColor: number = 0xFF0000; // Red color for snakes
     private worldWidth: number;
     private worldHeight: number;
@@ -61,10 +62,18 @@ export class Game extends Scene
     private explosionSound: Phaser.Sound.BaseSound;
     private controls: Phaser.Cameras.Controls.SmoothedKeyControl;
     private targetZoom: number = 1;
+    private isRightMouseDown: boolean = false;
+    private cKey: Phaser.Input.Keyboard.Key | null = null;
+    private isFirstGeneration: boolean = true;
+    private gameSpeed: number = 50;
+    private generationsPerRound: number = 50; // Number of generations per round
+    private currentRoundGeneration: number = 0;
+    private isRoundActive: boolean = false;
 
 
 
     
+
 
 
     private isPulsarCell(x: number, y: number): boolean {
@@ -139,8 +148,9 @@ export class Game extends Scene
         
 
         EventBus.on('toggleSimulation', this.toggleSimulation);
-        EventBus.on('resetGame', this.resetGame);
+        EventBus.on('resetGame', this.resetGame);  // Make sure this line is present
         EventBus.on('returnToMenu', this.returnToMenu);
+        EventBus.on('update-game-speed', this.updateGameSpeed);
 
     }
 
@@ -151,6 +161,7 @@ export class Game extends Scene
         this.load.audio('backgroundMusic', 'sounds/music.mp3');
         this.load.audio('timeStop', 'sounds/timestop.wav');    
         this.load.audio("explosion", "sounds/explosion.wav");
+        this.load.audio("collision", "sounds/enemyHit.wav");
     }
 
     create ()
@@ -188,15 +199,19 @@ export class Game extends Scene
         if (this.input.keyboard) {
             this.keys = this.input.keyboard.addKeys('W,A,S,D') as { [key: string]: Phaser.Input.Keyboard.Key };
             this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+            this.cKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C);
         } else {
             console.warn('Keyboard input is not available');
             this.keys = {};
             this.spaceKey = null;
+            this.cKey = null;
         }
 
         this.input.on('pointermove', this.handlePointerMove, this);
         this.input.on('pointerdown', this.handlePointerDown, this);
         this.input.on('pointerup', this.handlePointerUp, this);
+        this.input.on('rightdown', this.handleRightMouseDown, this);
+        this.input.on('rightup', this.handleRightMouseUp, this);
 
         // Initialize previous grid
         this.previousGrid = this.grid.map(row => [...row]);
@@ -234,6 +249,7 @@ export class Game extends Scene
         this.coinSound = this.sound.add('coin');
         this.timeStopSound = this.sound.add('timeStop');
         this.explosionSound = this.sound.add('explosion');
+        this.collisionSound = this.sound.add('collision');
 
         this.enemyGrid = Array(this.worldSize).fill(null).map(() => Array(this.worldSize).fill(false));
 
@@ -299,8 +315,18 @@ export class Game extends Scene
 
         // Check for spacebar press to toggle simulation
         if (this.input.keyboard && this.spaceKey && Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
-            this.toggleSimulation();
-            this.timeStopSound.play();
+            if (!this.isRoundActive) {
+                this.toggleSimulation();
+                this.timeStopSound.play();
+            }
+            // Comment out the ability to pause/resume during a round
+            /*
+            else if (this.isRoundActive && !this.isSimulationRunning) {
+                this.isSimulationRunning = true;
+                this.toggleSimulation();
+                this.timeStopSound.play();
+            }
+            */
         }
 
         // Check for rotation keys
@@ -309,6 +335,11 @@ export class Game extends Scene
         }
         if (this.eKey && Phaser.Input.Keyboard.JustDown(this.eKey)) {
             this.rotateStructureRight();
+        }
+
+        // Check for 'C' key press to deselect structure
+        if (this.cKey && Phaser.Input.Keyboard.JustDown(this.cKey)) {
+            this.deselectStructure();
         }
     }
 
@@ -343,24 +374,31 @@ export class Game extends Scene
 
         const camera = this.cameras.main;
         const zoom = camera.zoom;
-        const viewportWidth = camera.width / zoom;
-        const viewportHeight = camera.height / zoom;
 
-        // Calculate the visible area in world coordinates
-        const startX = Math.floor(camera.scrollX / this.cellSize);
-        const startY = Math.floor(camera.scrollY / this.cellSize);
-        const endX = Math.ceil((camera.scrollX + viewportWidth) / this.cellSize);
-        const endY = Math.ceil((camera.scrollY + viewportHeight) / this.cellSize);
+        // Retrieve the exact visible area of the camera
+        const view = camera.worldView;
 
-        // Ensure we're drawing at least the entire visible area
-        const visibleWidth = endX - startX;
-        const visibleHeight = endY - startY;
+        // Define a buffer to ensure partial cells are rendered
+        const buffer = 2; // Increased buffer for better coverage
+
+        // Calculate start and end positions with buffer
+        const startX = Math.max(0, Math.floor(view.x / this.cellSize) - buffer);
+        const startY = Math.max(0, Math.floor(view.y / this.cellSize) - buffer);
+        const endX = Math.min(this.worldSize, Math.ceil((view.x + view.width) / this.cellSize) + buffer);
+        const endY = Math.min(this.worldSize, Math.ceil((view.y + view.height) / this.cellSize) + buffer);
+
+        // Optional: Fill the background to prevent any black areas
+        // Uncomment the following lines if you prefer a background color
+        /*
+        this.graphics.fillStyle(0xFFFFFF, 1); // Set to your desired background color
+        this.graphics.fillRect(view.x, view.y, view.width, view.height);
+        */
 
         // Draw influence area
         const influenceArea = this.getPulsarInfluenceArea();
         this.graphics.fillStyle(0x0000ff, 0.1);
-        this.drawAreaCells(startX, startY, visibleWidth, visibleHeight, (x, y) => 
-            x >= 0 && x < this.worldSize && y >= 0 && y < this.worldSize && influenceArea[y][x]
+        this.drawAreaCells(startX, startY, endX - startX, endY - startY, (x, y) => 
+            influenceArea[y][x]
         );
 
         // Draw pulsar borders
@@ -369,8 +407,8 @@ export class Game extends Scene
             const borderSize = 17; // 13 (pulsar size) + 4 (2 cells on each side)
             const borderX = (pulsar.x - 2) * this.cellSize;
             const borderY = (pulsar.y - 2) * this.cellSize;
-            if (this.isInViewport(pulsar.x - 2, pulsar.y - 2, startX, startY, visibleWidth, visibleHeight) ||
-                this.isInViewport(pulsar.x + 14, pulsar.y + 14, startX, startY, visibleWidth, visibleHeight)) {
+            if (this.isInViewport(pulsar.x - 2, pulsar.y - 2, startX, startY, endX - startX, endY - startY) ||
+                this.isInViewport(pulsar.x + 14, pulsar.y + 14, startX, startY, endX - startX, endY - startY)) {
                 this.graphics.fillRect(borderX, borderY, borderSize * this.cellSize, borderSize * this.cellSize);
             }
         }
@@ -378,34 +416,33 @@ export class Game extends Scene
         // Draw grid lines
         const lineThickness = Math.max(0.5, 1 / zoom);
         this.graphics.lineStyle(lineThickness, 0x333333);
+
         for (let x = startX; x <= endX; x++) {
             const worldX = x * this.cellSize;
-            this.graphics.moveTo(worldX, camera.scrollY);
-            this.graphics.lineTo(worldX, camera.scrollY + viewportHeight);
+            this.graphics.moveTo(worldX, view.y);
+            this.graphics.lineTo(worldX, view.y + view.height);
         }
         for (let y = startY; y <= endY; y++) {
             const worldY = y * this.cellSize;
-            this.graphics.moveTo(camera.scrollX, worldY);
-            this.graphics.lineTo(camera.scrollX + viewportWidth, worldY);
+            this.graphics.moveTo(view.x, worldY);
+            this.graphics.lineTo(view.x + view.width, worldY);
         }
         this.graphics.strokePath();
 
         // Draw cells
-        this.drawAreaCells(startX, startY, visibleWidth, visibleHeight, (x, y) => {
-            if (x >= 0 && x < this.worldSize && y >= 0 && y < this.worldSize) {
-                if (this.grid[y][x]) {
-                    if (this.isPulsarCell(x, y)) {
-                        this.graphics.fillStyle(this.pulsarColor);
-                    } else {
-                        const cellKey = `${x},${y}`;
-                        const cellAge = this.stableStructures[cellKey] || 0;
-                        this.graphics.fillStyle(cellAge >= 10 ? this.orangeColor : 0x00ff00);
-                    }
-                    return true;
-                } else if (this.enemyGrid[y][x]) {
-                    this.graphics.fillStyle(this.enemyColor);
-                    return true;
+        this.drawAreaCells(startX, startY, endX - startX, endY - startY, (x, y) => {
+            if (this.grid[y][x]) {
+                if (this.isPulsarCell(x, y)) {
+                    this.graphics.fillStyle(this.pulsarColor);
+                } else {
+                    const cellKey = `${x},${y}`;
+                    const cellAge = this.stableStructures[cellKey] || 0;
+                    this.graphics.fillStyle(cellAge >= 10 ? this.orangeColor : 0x00ff00);
                 }
+                return true;
+            } else if (this.enemyGrid[y][x]) {
+                this.graphics.fillStyle(this.enemyColor);
+                return true;
             }
             return false;
         });
@@ -477,7 +514,7 @@ export class Game extends Scene
         this.graphics.fillStyle(this.snakeColor);
         for (const snake of this.snakes) {
             for (const segment of snake.body) {
-                if (this.isInViewport(segment.x, segment.y, startX, startY, visibleWidth, visibleHeight)) {
+                if (this.isInViewport(segment.x, segment.y, startX, startY, endX - startX, endY - startY)) {
                     this.graphics.fillRect(
                         segment.x * this.cellSize,
                         segment.y * this.cellSize,
@@ -541,15 +578,43 @@ export class Game extends Scene
 
     handlePointerDown = (pointer: Phaser.Input.Pointer) =>
     {
-        this.isMouseDown = true;
-        if (this.hoverCell) {
-            this.toggleCell(this.hoverCell.x, this.hoverCell.y);
+        if (pointer.rightButtonDown()) {
+            this.handleRightMouseDown(pointer);
+        } else {
+            this.isMouseDown = true;
+            if (this.hoverCell) {
+                this.toggleCell(this.hoverCell.x, this.hoverCell.y);
+            }
         }
     }
 
-    handlePointerUp = () =>
+    handlePointerUp = (pointer: Phaser.Input.Pointer) =>
     {
-        this.isMouseDown = false;
+        if (pointer.rightButtonReleased()) {
+            this.handleRightMouseUp();
+        } else {
+            this.isMouseDown = false;
+        }
+    }
+
+    private handleRightMouseDown = (pointer: Phaser.Input.Pointer) => {
+        this.isRightMouseDown = true;
+        this.deselectStructure();
+    }
+
+    private handleRightMouseUp = () => {
+        this.isRightMouseDown = false;
+    }
+
+    private deselectStructure = () => {
+        if (this.selectedStructure) {
+            this.selectedStructure = null;
+            this.hoverStructure = null;
+            this.rotationIndex = 0; // Reset rotation index
+            EventBus.emit('structure-deselected');
+            this.drawGrid(); // Redraw the grid to remove the hover effect
+            this.clickSound.play(); // Optional: Play a sound when deselecting
+        }
     }
 
     toggleCell(x: number, y: number) {
@@ -594,41 +659,67 @@ export class Game extends Scene
         }
     }
 
-    toggleSimulation = () =>
-    {
+    toggleSimulation = () => {
+        // Toggle the simulation running state
         this.isSimulationRunning = !this.isSimulationRunning;
 
         if (this.isSimulationRunning) {
+            if (!this.isRoundActive) {
+                // Only allow starting a new round if one isn't active
+                this.startNewRound();
+            }
+
+            // Start the simulation timer
             this.simulationTimer = this.time.addEvent({
-                delay: 200,
+                delay: this.gameSpeed,
                 callback: this.updateGrid,
                 callbackScope: this,
                 loop: true
             });
-            this.stableCount = 0; // Reset stable count
         } else {
+            // Stop the simulation timer
             if (this.simulationTimer) {
                 this.simulationTimer.remove();
+                this.simulationTimer = null; // Clear the timer reference
             }
-            this.previousGrid = this.grid.map(row => [...row]);
-            this.updateStableCount();
-            this.updateCellCount();
-            this.clampRemainingCells();
         }
 
-        // Immediately update the grid visuals
         this.drawGrid();
         this.updateMinimapData();
 
         EventBus.emit('simulation-toggled', this.isSimulationRunning);
+        EventBus.emit('round-status-changed', this.isRoundActive);
         this.emitStatsUpdate();
 
         console.log(`Simulation ${this.isSimulationRunning ? 'started' : 'stopped'}`);
     }
 
+    startNewRound() {
+        this.isRoundActive = true;
+        this.isSimulationRunning = true;
+        this.currentRoundGeneration = 0;
+        EventBus.emit('round-status-changed', true);
+        this.emitStatsUpdate();
+    }
+
     updateGrid() {
-        const newGrid = this.grid.map(row => [...row]);
-        const newEnemyGrid = this.enemyGrid.map(row => [...row]);
+        if (this.isFirstGeneration) {
+            this.startBackgroundMusic();
+            this.isFirstGeneration = false;
+        }
+
+        // Initialize new grids
+        const newGrid: boolean[][] = Array(this.worldSize);
+        const newEnemyGrid: boolean[][] = Array(this.worldSize);
+
+        for (let y = 0; y < this.worldSize; y++) {
+            newGrid[y] = Array(this.worldSize);
+            newEnemyGrid[y] = Array(this.worldSize);
+            for (let x = 0; x < this.worldSize; x++) {
+                newGrid[y][x] = this.grid[y][x];
+                newEnemyGrid[y][x] = this.enemyGrid[y][x];
+            }
+        }
 
         // Update player cells
         for (let y = 0; y < this.worldSize; y++) {
@@ -693,6 +784,10 @@ export class Game extends Scene
         }
 
         this.generationCount++;
+        this.currentRoundGeneration++;
+
+        // Emit stats update after each generation
+        this.emitStatsUpdate();
 
         // Update pulsars
         for (let i = this.pulsars.length - 1; i >= 0; i--) {
@@ -719,7 +814,6 @@ export class Game extends Scene
         this.updateStableCount();
         this.clampRemainingCells();
         this.checkGameOver();
-        this.emitStatsUpdate();
 
         // Update and draw snakes
         this.updateSnakes();
@@ -728,6 +822,23 @@ export class Game extends Scene
         if (this.generationCount % this.snakeSpawnInterval === 0) {
             this.spawnSnake();
         }
+
+        if (this.currentRoundGeneration >= this.generationsPerRound) {
+            this.endRound();
+        }
+    }
+
+    endRound() {
+        this.isRoundActive = false;
+        this.isSimulationRunning = false;
+        if (this.simulationTimer) {
+            this.simulationTimer.remove();
+        }
+        EventBus.emit('round-ended');
+        this.timeStopSound.play();
+
+        // Ensure final stats are emitted
+        this.emitStatsUpdate();
     }
 
     countNeighbors (x: number, y: number): number
@@ -814,8 +925,9 @@ export class Game extends Scene
         EventBus.emit('stats-updated', {
             generationCount: this.generationCount,
             remainingCells: this.remainingCells,
-            pulsarCount: this.pulsarCount
-            // Remove the availableCells line
+            pulsarCount: this.pulsarCount,
+            currentRoundGeneration: this.currentRoundGeneration,
+            generationsPerRound: this.generationsPerRound
         });
     }
 
@@ -843,7 +955,7 @@ export class Game extends Scene
         }
     }
 
-    resetGame() {
+    resetGame = () => {  // Use arrow function to preserve 'this' context
         if (this.simulationTimer) {
             this.simulationTimer.remove();
         }
@@ -876,6 +988,17 @@ export class Game extends Scene
         EventBus.emit('simulation-toggled', this.isSimulationRunning);
         EventBus.emit('game-reset');
         EventBus.emit('structure-deselected');
+        this.isFirstGeneration = true;
+
+        // Stop the music
+        if (this.backgroundMusic && this.isMusicPlaying) {
+            this.backgroundMusic.stop();
+            this.isMusicPlaying = false;
+            EventBus.emit('music-state-changed', this.isMusicPlaying);
+        }
+        this.currentRoundGeneration = 0;
+        this.isRoundActive = false;
+        EventBus.emit('round-status-changed', this.isRoundActive);
     }
 
     placeStructure(x: number, y: number, structureName: string) {
@@ -1126,20 +1249,22 @@ export class Game extends Scene
 
     handleMouseWheel(deltaY: number) {
         const zoomChange = deltaY * -0.001;
-        const newZoom = Phaser.Math.Clamp(this.camera.zoom + zoomChange, this.minZoom, this.maxZoom);
+        const newZoom = Phaser.Math.Clamp(this.targetZoom + zoomChange, this.minZoom, this.maxZoom);
         
-        if (newZoom !== this.camera.zoom) {
+        if (newZoom !== this.targetZoom) {
             this.targetZoom = newZoom;
         }
     }
 
     clampCamera() {
-        const zoom = this.camera.zoom;
-        const maxScrollX = Math.max(0, this.worldWidth - this.camera.width / zoom);
-        const maxScrollY = Math.max(0, this.worldHeight - this.camera.height / zoom);
+        const camera = this.cameras.main;
+        const view = camera.worldView;
 
-        this.camera.scrollX = Phaser.Math.Clamp(this.camera.scrollX, 0, maxScrollX);
-        this.camera.scrollY = Phaser.Math.Clamp(this.camera.scrollY, 0, maxScrollY);
+        const maxScrollX = Math.max(0, this.worldWidth - view.width);
+        const maxScrollY = Math.max(0, this.worldHeight - view.height);
+
+        camera.scrollX = Phaser.Math.Clamp(camera.scrollX, 0, maxScrollX);
+        camera.scrollY = Phaser.Math.Clamp(camera.scrollY, 0, maxScrollY);
     }
 
     updateMinimapData() {
@@ -1194,6 +1319,7 @@ export class Game extends Scene
         if (this.remainingCells < structureCost) return false;
 
         const isPulsar = this.selectedStructure === 'Pulsar';
+        const influenceArea = this.getPulsarInfluenceArea();
 
         for (let dy = 0; dy < structure.length; dy++) {
             for (let dx = 0; dx < structure[dy].length; dx++) {
@@ -1202,8 +1328,14 @@ export class Game extends Scene
                 if (worldX < 0 || worldX >= this.worldSize || worldY < 0 || worldY >= this.worldSize) {
                     return false;
                 }
-                if (structure[dy][dx] && this.grid[worldY][worldX]) {
-                    return false;
+                if (structure[dy][dx]) {
+                    if (this.grid[worldY][worldX]) {
+                        return false;
+                    }
+                    // Check if the cell is within the influence area, unless it's a Pulsar
+                    if (!isPulsar && !influenceArea[worldY][worldX]) {
+                        return false;
+                    }
                 }
             }
         }
@@ -1320,10 +1452,17 @@ export class Game extends Scene
             this.backgroundMusic.pause();
             this.isMusicPlaying = false;
         } else {
-            this.backgroundMusic.play();
-            this.isMusicPlaying = true;
+            this.startBackgroundMusic();
         }
         EventBus.emit('music-state-changed', this.isMusicPlaying);
+    }
+
+    private startBackgroundMusic() {
+        if (this.backgroundMusic && !this.isMusicPlaying) {
+            this.backgroundMusic.play();
+            this.isMusicPlaying = true;
+            EventBus.emit('music-state-changed', this.isMusicPlaying);
+        }
     }
 
     private predictCellMovement(initialGrid: boolean[][], steps: number): boolean[][] {
@@ -1406,7 +1545,7 @@ export class Game extends Scene
 
                 // Reward the player with 10 remaining cells
                 this.remainingCells += 10;
-                this.coinSound.play(); // Play a sound to indicate the reward
+                this.collisionSound.play(); // Play a sound to indicate the reward
                 this.emitStatsUpdate(); // Update the UI with the new remaining cells count
             }
         }
@@ -1577,6 +1716,19 @@ export class Game extends Scene
         if (this.input.activePointer.isDown && this.hoverCell && this.selectedStructure) {
             const { x, y } = this.hoverCell;
             this.placeStructure(x, y, this.selectedStructure);
+        }
+    }
+
+    private updateGameSpeed = (speed: number) => {
+        this.gameSpeed = speed;
+        if (this.isSimulationRunning && this.simulationTimer) {
+            this.simulationTimer.remove();
+            this.simulationTimer = this.time.addEvent({
+                delay: this.gameSpeed,
+                callback: this.updateGrid,
+                callbackScope: this,
+                loop: true
+            });
         }
     }
 }

@@ -8,7 +8,6 @@
     
     const dispatch = createEventDispatcher();
     
-    export let isSimulationRunning: boolean = false;
     export let generationCount: number = 0;
     export let remainingCells: number;
     export let pulsarCount: number = 0;
@@ -17,7 +16,17 @@
     let selectedStructure: string | null = null;
     let showRotationInstructions = false;
     let isMusicPlaying = false;
-    
+    let gameSpeed: number = 50;
+    const speedLabels: { [key: number]: string } = {
+        50: "Fast",
+        100: "Regular",
+        200: "Chillout"
+    };
+    let currentRoundGeneration: number = 0;
+    let generationsPerRound: number = 50;
+    let isRoundActive: boolean = false;
+    let isRoundTransitioning: boolean = false;
+
     onMount(() => {
         EventBus.on('game-over', () => {
             isGameOver = true;
@@ -38,11 +47,38 @@
             isMusicPlaying = state;
         });
 
-       
+        EventBus.on('update-game-speed', (speed: number) => {
+            gameSpeed = speed;
+        });
+
+        EventBus.on('round-status-changed', (status: boolean) => {
+            if (status) {
+                // Round is starting
+                isRoundTransitioning = true;
+                setTimeout(() => {
+                    currentRoundGeneration = 0;
+                    isRoundActive = true;
+                    isRoundTransitioning = false;
+                }, 50); // Small delay to ensure the progress bar resets visually
+            } else {
+                // Round is ending
+                isRoundActive = false;
+            }
+        });
+
+        EventBus.on('stats-updated', (stats: any) => {
+            if (!isRoundTransitioning) {
+                generationCount = stats.generationCount;
+                remainingCells = stats.remainingCells;
+                pulsarCount = stats.pulsarCount;
+                currentRoundGeneration = stats.currentRoundGeneration;
+                generationsPerRound = stats.generationsPerRound;
+            }
+        });
 
     });
     
-    function toggleSimulation() {
+    function startRound() {
         EventBus.emit('toggleSimulation');
     }
     
@@ -83,6 +119,21 @@
     function toggleMusic() {
         EventBus.emit('toggle-music');
     }
+
+    // Add this function to handle structure deselection
+    function handleStructureDeselected() {
+        selectedStructure = null;
+    }
+
+    function updateGameSpeed() {
+        EventBus.emit('update-game-speed', gameSpeed);
+    }
+
+    function getSpeedLabel(speed: number): string {
+        return speedLabels[speed] || speed.toString();
+    }
+
+    $: roundProgress = isRoundTransitioning ? 0 : (currentRoundGeneration / generationsPerRound) * 100;
 </script>
 
 <div class="game-ui">
@@ -104,38 +155,64 @@
         {#if isGameOver}
             <div class="game-over">Game Over!</div>
             <button class="control-button" on:click={resetGame}>🔄 New Game</button>
+        {:else if isRoundActive || isRoundTransitioning}
+            <div class="round-progress">
+                <h3>Round Progress</h3>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {roundProgress}%"></div>
+                </div>
+                <div class="progress-text">
+                    {isRoundTransitioning ? 0 : currentRoundGeneration} / {generationsPerRound} Generations
+                </div>
+            </div>
         {:else}
-            <button class="control-button" on:click={toggleSimulation}>
-                {isSimulationRunning ? '⏹️ Stop' : '▶️ Start'} Simulation
+            <button class="control-button" on:click={startRound}>
+                Start Round
             </button>
-            <button class="control-button" on:click={resetGame}>🔄 Reset Game</button>
         {/if}
+        <button class="control-button" on:click={resetGame}>🔄 Reset Game</button>
         <button class="control-button" on:click={returnToMenu}>🏠 Return to Menu</button>
         <button class="control-button" on:click={toggleInstructions}>
-            ℹ️ {showInstructions ? 'Hide' : 'Show'} Instructions
+            ℹ️ Show Instructions
         </button>
         <button class="control-button" on:click={toggleMusic}>
             {isMusicPlaying ? '🔇 Stop Music' : '🎵 Play Music'}
         </button>
     </div>
+    <div class="speed-control">
+        <label for="speed-slider">Game Speed: {getSpeedLabel(gameSpeed)}</label>
+        <input 
+            type="range" 
+            id="speed-slider" 
+            min="50" 
+            max="200" 
+            step="50" 
+            bind:value={gameSpeed} 
+            on:change={updateGameSpeed}
+        >
+    </div>
     {#if showInstructions}
-        <div class="instructions">
-            <h3>Game Rules:</h3>
-            <ul>
-                <li>Press SPACE to toggle simulation on and off.</li>
-                <li>The game starts with 3 pulsars, as your base.</li>
-                <li>Every pulsar generates 1 cell every 15 generations.</li>
-                <li>You start with 100 cells.</li>
-                <li>Use generated cells to build structures from the bottom panel.</li>
-                <li>Red enemy snakes are emerging, trying to destroy your base.</li>
-                <li>Good luck</li>
-            </ul>
+        <div class="instructions-overlay">
+            <div class="instructions-window">
+                <button class="close-button" on:click={toggleInstructions}>×</button>
+                <h2>Game Rules</h2>
+                <ul>
+                    <li>Press SPACE to toggle simulation on and off.</li>
+                    <li>The game starts with 3 pulsars, as your base.</li>
+                    <li>Every pulsar generates 1 cell every 15 generations.</li>
+                    <li>You start with 100 cells.</li>
+                    <li>Use generated cells to build structures from the bottom panel.</li>
+                    <li>Red enemy snakes are emerging, trying to destroy your base.</li>
+                    <li>Good luck</li>
+                </ul>
+            </div>
         </div>
     {/if}
     {#if showRotationInstructions}
         <div class="rotation-instructions">
             <p>Press Q to rotate left</p>
             <p>Press E to rotate right</p>
+            <p>Press C to deselect structure</p>
         </div>
     {/if}
 </div>
@@ -247,25 +324,58 @@
     transform: translateY(0);
 }
 
-.instructions {
-    margin-top: 20px;
-    padding: 10px;
-    background: rgba(0, 0, 0, 0.6);
-    border-radius: 5px;
+.instructions-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
 }
 
-.instructions h3 {
-    margin-top: 0;
+.instructions-window {
+    background-color: #000;
+    border: 2px solid #00ff00;
+    border-radius: 10px;
+    padding: 20px;
+    max-width: 80%;
+    max-height: 80%;
+    overflow-y: auto;
+    position: relative;
+    color: #00ff00;
+    font-family: 'VT323', monospace;
+}
+
+.instructions-window h2 {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.instructions-window ul {
+    padding-left: 20px;
+}
+
+.instructions-window li {
     margin-bottom: 10px;
 }
 
-.instructions ul {
-    padding-left: 20px;
-    margin: 0;
+.close-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: none;
+    border: none;
+    color: #00ff00;
+    font-size: 24px;
+    cursor: pointer;
 }
 
-.instructions li {
-    margin-bottom: 5px;
+.close-button:hover {
+    color: #ff0000;
 }
 
 .game-over {
@@ -362,6 +472,68 @@
     margin-top: 10px;
     text-align: center;
     font-weight: bold;
+}
+
+/* Add this style for selected structures */
+.selected {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.speed-control {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.speed-control label {
+    margin-bottom: 10px;
+}
+
+.speed-control input[type="range"] {
+    width: 100%;
+    -webkit-appearance: none;
+    background: rgba(0, 255, 0, 0.2);
+    outline: none;
+    opacity: 0.7;
+    transition: opacity .2s;
+}
+
+.speed-control input[type="range"]:hover {
+    opacity: 1;
+}
+
+.round-progress {
+    margin-top: 20px;
+    background: rgba(0, 255, 0, 0.1);
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.round-progress h3 {
+    margin: 0 0 10px 0;
+    text-align: center;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 20px;
+    background-color: rgba(0, 255, 0, 0.2);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background-color: #00ff00;
+    transition: width 0.3s ease-in-out;
+}
+
+.progress-text {
+    text-align: center;
+    margin-top: 5px;
+    font-size: 0.9em;
 }
 
 </style>

@@ -91,7 +91,6 @@
 {/if}
 {#if showGameUI}
     <GameUI 
-        {isSimulationRunning}
         {generationCount}
         {remainingCells}
         {pulsarCount}
