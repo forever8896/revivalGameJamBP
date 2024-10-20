@@ -31,21 +31,16 @@ export default defineConfig({
 			include: [/node_modules/],
 		},
 
-		// Manual chunking for large libraries
-		rollupOptions: {
-			output: {
-				manualChunks: {
-					phaser: ['phaser'],
-				},
-			},
-		},
-
 		// Specify out directory
 		outDir: 'build',
 	},
 	optimizeDeps: {
 		include: ['phaser'],
-		exclude: ['svelte', '@sveltejs/kit'],
+	},
+	resolve: {
+		alias: {
+			phaser: resolve(__dirname, 'node_modules/phaser/dist/phaser.min.js'),
+		},
 	},
 	server: {
 		port: 8080
