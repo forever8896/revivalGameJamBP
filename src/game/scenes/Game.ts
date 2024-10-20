@@ -377,25 +377,13 @@ export class Game extends Scene
 
         const camera = this.cameras.main;
         const zoom = camera.zoom;
-
-        // Retrieve the exact visible area of the camera
         const view = camera.worldView;
 
-        // Define a buffer to ensure partial cells are rendered
-        const buffer = 2; // Increased buffer for better coverage
-
-        // Calculate start and end positions with buffer
+        const buffer = 2;
         const startX = Math.max(0, Math.floor(view.x / this.cellSize) - buffer);
         const startY = Math.max(0, Math.floor(view.y / this.cellSize) - buffer);
         const endX = Math.min(this.worldSize, Math.ceil((view.x + view.width) / this.cellSize) + buffer);
         const endY = Math.min(this.worldSize, Math.ceil((view.y + view.height) / this.cellSize) + buffer);
-
-        // Optional: Fill the background to prevent any black areas
-        // Uncomment the following lines if you prefer a background color
-        /*
-        this.graphics.fillStyle(0xFFFFFF, 1); // Set to your desired background color
-        this.graphics.fillRect(view.x, view.y, view.width, view.height);
-        */
 
         // Draw influence area
         const influenceArea = this.getPulsarInfluenceArea();
@@ -407,7 +395,7 @@ export class Game extends Scene
         // Draw pulsar borders
         this.graphics.fillStyle(0xFF0000, 0.3);
         for (const pulsar of this.pulsars) {
-            const borderSize = 17; // 13 (pulsar size) + 4 (2 cells on each side)
+            const borderSize = 17;
             const borderX = (pulsar.x - 2) * this.cellSize;
             const borderY = (pulsar.y - 2) * this.cellSize;
             if (this.isInViewport(pulsar.x - 2, pulsar.y - 2, startX, startY, endX - startX, endY - startY) ||
@@ -456,7 +444,6 @@ export class Game extends Scene
                 const canPlace = this.canPlaceStructure(this.hoverCell.x, this.hoverCell.y, this.hoverStructure);
                 this.graphics.fillStyle(canPlace ? 0x00ff00 : 0xff0000, 0.3);
 
-                // Draw the structure hover
                 for (let dy = 0; dy < this.hoverStructure.length; dy++) {
                     for (let dx = 0; dx < this.hoverStructure[dy].length; dx++) {
                         if (this.hoverStructure[dy][dx]) {
@@ -470,11 +457,10 @@ export class Game extends Scene
                     }
                 }
 
-                // If the structure is a Pulsar, draw the red area
                 if (this.selectedStructure === 'Pulsar') {
-                    this.graphics.fillStyle(0xFF0000, 0.3); // Red color with 30% opacity
+                    this.graphics.fillStyle(0xFF0000, 0.3);
                     const pulsarSize = 13;
-                    const borderSize = pulsarSize + 4; // 2 cells on each side
+                    const borderSize = pulsarSize + 4;
 
                     this.graphics.fillRect(
                         (this.hoverCell.x - 2) * this.cellSize,
@@ -483,7 +469,6 @@ export class Game extends Scene
                         borderSize * this.cellSize
                     );
 
-                    // Clear the actual pulsar area
                     this.graphics.fillStyle(canPlace ? 0x00ff00 : 0xff0000, 0.3);
                     this.graphics.fillRect(
                         this.hoverCell.x * this.cellSize,
@@ -493,12 +478,10 @@ export class Game extends Scene
                     );
                 }
 
-                // Draw arrow for Glider and LWSS
                 if (this.selectedStructure === 'Glider' || this.selectedStructure === 'LWSS') {
                     this.drawStructureArrow(this.hoverCell.x, this.hoverCell.y, this.hoverStructure, this.selectedStructure);
                 }
             } else {
-                // Single cell hover effect when no structure is selected
                 const influenceArea = this.getPulsarInfluenceArea();
                 if (influenceArea[this.hoverCell.y][this.hoverCell.x]) {
                     const canPlace = this.remainingCells > 0 && !this.grid[this.hoverCell.y][this.hoverCell.x];
@@ -729,106 +712,33 @@ export class Game extends Scene
             this.isFirstGeneration = false;
         }
 
-        // Initialize new grids
+        // Initialize new grid
         const newGrid: boolean[][] = Array(this.worldSize);
-        const newEnemyGrid: boolean[][] = Array(this.worldSize);
-
         for (let y = 0; y < this.worldSize; y++) {
-            newGrid[y] = Array(this.worldSize);
-            newEnemyGrid[y] = Array(this.worldSize);
-            for (let x = 0; x < this.worldSize; x++) {
-                newGrid[y][x] = this.grid[y][x];
-                newEnemyGrid[y][x] = this.enemyGrid[y][x];
-            }
+            newGrid[y] = new Array(this.worldSize);
         }
 
-        // Update player cells
+        // Update cells
         for (let y = 0; y < this.worldSize; y++) {
             for (let x = 0; x < this.worldSize; x++) {
                 const neighbors = this.countNeighbors(x, y);
-                const enemyNeighbors = this.countEnemyNeighbors(x, y);
-                const totalNeighbors = neighbors + enemyNeighbors;
-
                 if (this.grid[y][x]) {
-                    // Player cell logic
-                    if (totalNeighbors < 2 || totalNeighbors > 3) {
-                        newGrid[y][x] = false;
-                    }
-                } else if (!this.enemyGrid[y][x]) {
-                    // Empty cell logic
-                    if (totalNeighbors === 3) {
-                        if (enemyNeighbors > neighbors) {
-                            newEnemyGrid[y][x] = true;
-                        } else {
-                            newGrid[y][x] = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Update enemy cells
-        for (let y = 0; y < this.worldSize; y++) {
-            for (let x = 0; x < this.worldSize; x++) {
-                const neighbors = this.countEnemyNeighbors(x, y);
-                const playerNeighbors = this.countNeighbors(x, y);
-                const totalNeighbors = neighbors + playerNeighbors;
-
-                if (this.enemyGrid[y][x]) {
-                    // Enemy cells survive with 2 or 3 neighbors (total)
-                    if (totalNeighbors >= 2 && totalNeighbors <= 3) {
-                        newEnemyGrid[y][x] = true;
-                    } else {
-                        newEnemyGrid[y][x] = false;
-                    }
-                } else if (!this.grid[y][x]) {
-                    // Empty cell becomes enemy if it has exactly 3 enemy neighbors
-                    if (neighbors === 3) {
-                        newEnemyGrid[y][x] = true;
-                    }
+                    newGrid[y][x] = neighbors === 2 || neighbors === 3;
+                } else {
+                    newGrid[y][x] = neighbors === 3;
                 }
             }
         }
 
         this.grid = newGrid;
-        this.enemyGrid = newEnemyGrid;
-        this.keepEnemiesAway();
-
-        // Spawn new enemies
-        if (this.generationCount % this.enemyShootInterval === 0) {
-            this.shootEnemyShips();
-        }
-
-        // Add new spawn point every 1000 generations
-        if (this.generationCount % 1000 === 0) {
-            this.addEnemySpawnPoint();
-        }
 
         this.generationCount++;
         this.currentRoundGeneration++;
 
-        // Emit stats update after each generation
-        this.emitStatsUpdate();
-
         // Update pulsars
-        for (let i = this.pulsars.length - 1; i >= 0; i--) {
-            const pulsar = this.pulsars[i];
-            if (!this.isPulsarStillValid(pulsar.x, pulsar.y)) {
-                this.pulsars.splice(i, 1);
-                this.explosionSound.play(); // Play explosion sound when pulsar dies
-                this.pulsarCount--;
-            } else {
-                pulsar.generationCount++;
-                if (pulsar.generationCount % 15 === 0) {
-                    this.remainingCells++;
-                }
-            }
-        }
+        this.updatePulsars();
 
-        this.pulsarCount = this.pulsars.length;
-        console.log(`Remaining pulsars: ${this.pulsarCount}`);
-
-        this.previousGrid = this.grid;
+        this.previousGrid = this.grid.map(row => [...row]);
         this.drawGrid();
         this.updateMinimapData();
         this.updateCellCount();
@@ -847,6 +757,27 @@ export class Game extends Scene
         if (this.currentRoundGeneration >= this.generationsPerRound) {
             this.endRound();
         }
+
+        // Emit stats update after each generation
+        this.emitStatsUpdate();
+    }
+
+    private updatePulsars() {
+        for (let i = this.pulsars.length - 1; i >= 0; i--) {
+            const pulsar = this.pulsars[i];
+            if (!this.isPulsarStillValid(pulsar.x, pulsar.y)) {
+                this.pulsars.splice(i, 1);
+                this.explosionSound.play();
+                this.pulsarCount--;
+            } else {
+                pulsar.generationCount++;
+                if (pulsar.generationCount % 15 === 0) {
+                    this.remainingCells++;
+                }
+            }
+        }
+
+        this.pulsarCount = this.pulsars.length;
     }
 
     endRound() {
