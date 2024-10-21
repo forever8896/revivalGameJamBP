@@ -3,7 +3,7 @@
     
     const dispatch = createEventDispatcher();
     
-    export let aboutText: string = "Welcome to Cellular Domination Station! This game is inspired by Conway's Game of Life, a cellular automaton simulation. Watch as cells evolve based on simple rules, creating complex patterns and behaviors. Enjoy the mesmerizing dance of life and death on a microscopic scale!";
+  
     
     function closeAbout() {
         dispatch('closeAbout');
@@ -12,7 +12,11 @@
     
     <div class="about-page">
         <h2>About the Game</h2>
-        <p>{aboutText}</p>
+        <p>Cellular Domination Station is a game inspired by Conway's Game of Life, a cellular automaton simulation.</p>
+        <p>Ever since I first heard about the Game of Life, I've been fascinated by the complexity that can arise from simple rules.</p>
+        <p>There is this fascinating <a target="_blank" href="https://youtu.be/xP5-iIeKXE8">video</a> showing the game of life inside of the game of life, creating a perfect loop of existence.</p>
+        <p>There is something spiritual about the concept of rules, and how even the smallest amount of order can create infinite complexity.</p>
+        <p>I hope you enjoy playing this game, and that it allows you to discover a bit of the beauty of the Game of Life.</p>
         <button on:click={closeAbout}>Back to Menu</button>
     </div>
     
@@ -27,7 +31,7 @@
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        background-color: rgba(10, 14, 23, 0.9);
+        background-color: black;
         color: #00ff00;
         font-family: 'VT323', monospace;
         padding: 20px;
@@ -36,7 +40,7 @@
     
     h2 {
         font-size: 2.5rem;
-        margin-bottom: 20px;
+        margin-bottom: 10px;
     }
     
     p {
@@ -44,7 +48,7 @@
         max-width: 600px;
         text-align: center;
         line-height: 1.6;
-        margin-bottom: 30px;
+        margin-bottom: 10px;
     }
     
     button {
@@ -61,5 +65,15 @@
     button:hover {
         background: #00ff00;
         color: #0a0e17;
+    }
+
+
+    a {
+        color: #9900ff;
+        text-decoration: none;
+    }
+
+    a:hover {
+        text-decoration: underline;
     }
     </style>

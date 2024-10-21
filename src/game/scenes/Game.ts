@@ -533,27 +533,10 @@ export class Game extends Scene
 
 
     private returnToMenu = () => {
-        // Stop the simulation if it's running
-        if (this.isSimulationRunning) {
-            this.toggleSimulation();
-        }
-
-        // Reset the game state
-        this.resetGame();
-
-        // Stop any ongoing sounds
-        this.sound.stopAll();
-
-        // Switch to the MainMenu scene
         this.scene.start('MainMenu');
-
-        // Use a small delay to ensure the scene has fully stopped before emitting the event
-        this.time.delayedCall(100, () => {
-            console.log("Emitting returnedToMenu event");
-            EventBus.emit('returnedToMenu'); // Changed event name
-            // Optionally retain gameDestroyed if needed elsewhere
-            // EventBus.emit('gameDestroyed');
-        });
+        this.scene.stop('Game');
+        EventBus.emit('returnedToMenu');
+        console.log("Emitted returnedToMenu event"); // Add this line for debugging
     }
 
     handlePointerMove = (pointer: Phaser.Input.Pointer) => {

@@ -17,6 +17,7 @@
     import MainMenuUI from '../components/MainMenuUI.svelte';
     import AboutPage from '../components/AboutPage.svelte';
     import GameUI from '../components/GameUI.svelte';
+    import CreditsPage from "../components/CreditsPage.svelte";
 
     export let phaserRef: TPhaserRef = {
         game: null,
@@ -25,9 +26,8 @@
 
     export let currentActiveScene: (scene: Scene) => void | undefined;
 
-    let showMainMenu = true;
     let showAboutPage = false;
-    let showGameUI = false;
+    let showCreditsPage = false;
 
     // Add these variables to hold the state
     let isSimulationRunning = false;
@@ -35,31 +35,23 @@
     let remainingCells = 0;
     let pulsarCount = 0;
 
-    function handleReturnToMenu() {
-        console.log("Handling return to menu"); // Debugging log
-        showMainMenu = true;
-        showGameUI = false;
-        showAboutPage = false;
-        if (phaserRef.game) {
-            phaserRef.game.destroy(true);
-            phaserRef.game = null;
-        }
-        phaserRef.scene = null;
-    }
+    let activeScene: string = 'MainMenu';
+
+    $: console.log("Active scene changed to:", activeScene);
+
+
 
     onMount(() => {
         phaserRef.game = StartGame("game-container");
-        const width = window.innerWidth;
-        const height = window.innerHeight;
 
         EventBus.on('current-scene-ready', (scene_instance: Scene) => {
-            console.log(`Current scene ready: ${scene_instance.scene.key}`); // Debugging log
+            console.log(`Current scene ready: ${scene_instance.scene.key}`);
             phaserRef.scene = scene_instance;
             if(currentActiveScene) {
                 currentActiveScene(scene_instance);
             }
-            showMainMenu = scene_instance.scene.key === 'MainMenu';
-            showGameUI = scene_instance.scene.key === 'Game';
+            activeScene = scene_instance.scene.key;
+            console.log("Active scene updated to:", activeScene);
         });
 
         // Add listeners to update the state
@@ -77,60 +69,63 @@
             pulsarCount = stats.pulsarCount;
         });
 
-        // Add this listener to handle returning to the main menu
-      
-
-        EventBus.on('returnToMenu', handleReturnToMenu);
-        EventBus.on('returnedToMenu', handleReturnToMenu); // Added listener
+        EventBus.on('returnToMenu', handleCloseGame);
+       
 
         // Cleanup on destroy
         onDestroy(() => {
-            EventBus.off('current-scene-ready', (scene_instance: Scene) => {
-                phaserRef.scene = scene_instance;
-                if(currentActiveScene) {
-                    currentActiveScene(scene_instance);
-                }
-                showMainMenu = scene_instance.scene.key === 'MainMenu';
-                showGameUI = scene_instance.scene.key === 'Game';
-            });
-            EventBus.off('returnToMenu', handleReturnToMenu);
-            EventBus.off('returnedToMenu', handleReturnToMenu); // Cleanup listener
+            EventBus.off('current-scene-ready', () => {});
+            EventBus.off('returnToMenu', handleCloseGame);
             // ... any other cleanup ...
         });
     });
 
     function handleStartGame() {
         EventBus.emit('startGame');
-        showMainMenu = false;
-        showGameUI = true;
+        activeScene = 'Game';  // Update activeScene when starting the game
     }
 
     function handleShowAbout() {
         showAboutPage = true;
-        showMainMenu = false;
+    }
+
+    function handleShowCredits() {
+        showCreditsPage = true;
     }
 
     function handleCloseAbout() {
         showAboutPage = false;
-        showMainMenu = true;
     }
+
+    function handleCloseGame() {
+        EventBus.emit("returnToMenu");
+        activeScene = "MainMenu";
+    }
+
+
+    function handleCloseCredits() {
+        showCreditsPage = false;
+    }
+
+
 </script>
 
 <div id="game-container"></div>
-{#if showMainMenu}
-    <MainMenuUI on:startGame={handleStartGame} on:showAbout={handleShowAbout} />
-{/if}
-{#if showAboutPage}
-    <AboutPage on:closeAbout={handleCloseAbout} />
-{/if}
-{#if showGameUI}
-    <GameUI 
+{#if activeScene === 'MainMenu'}
+    <MainMenuUI on:startGame={handleStartGame} on:showAbout={handleShowAbout} on:showCredits={handleShowCredits} />
+{:else if activeScene === 'Game'}
+    <GameUI on:closeGame={handleCloseGame}
         {generationCount}
         {remainingCells}
         {pulsarCount}
     />
 {/if}
-
+{#if showAboutPage}
+    <AboutPage on:closeAbout={handleCloseAbout} />
+{/if}
+{#if showCreditsPage}
+    <CreditsPage on:closeCredits={handleCloseCredits} />
+{/if}
 <style>
     #game-container {
         width: 100vw;

@@ -1,5 +1,5 @@
 <svelte:head>
-    <title>Phaser Svelte Template</title>
+    <title>Cellular Domination Station</title>
 </svelte:head>
 
 <slot />
@@ -11,6 +11,6 @@
         padding: 0;
         color: rgba(255, 255, 255, 0.87);
         background-color: #000000;
-        font-family: Arial, Helvetica, sans-serif;
+        font-family: 'VT323', monospace;
     }
 </style>

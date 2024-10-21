@@ -1,12 +1,13 @@
 <script lang="ts">
     import { createEventDispatcher } from 'svelte';
+ 
     
     const dispatch = createEventDispatcher();
     
     export let title: string = 'Cellular Domination Station';
     export let buttonText: string = 'Start Game';
     export let aboutText: string = '𓆩♡𓆪About the soul of the game𓆩♡𓆪';
-    
+    export let creditsText: string = '𓆩♡𓆪Credits𓆩♡𓆪';
     function startGame() {
         dispatch('startGame');
     }
@@ -14,12 +15,16 @@
     function showAbout() {
         dispatch('showAbout');
     }
+    function showCredits() {
+        dispatch('showCredits');
+    }
     </script>
     
     <div class="main-menu">
         <h1>{title}</h1>
         <button on:click={startGame}>{buttonText}</button>
         <button on:click={showAbout} class="about-button">{aboutText}</button>
+        <button on:click={showCredits} class="credits-button">{creditsText}</button>
     </div>
     
     <style>
@@ -69,9 +74,20 @@
         margin-top: 80px;
         animation: none;
     }
+
+
+    .credits-button {
+        margin-top: 80px;
+        animation: wiggle 2s ease-in-out infinite;
+    }
     
     @keyframes float {
         0%, 100% { transform: translateY(0); }
         50% { transform: translateY(-10px); }
+    }
+
+    @keyframes wiggle {
+        0%, 100% { transform: rotate(0deg); }
+        50% { transform: rotate(10deg); }
     }
     </style>

@@ -5,6 +5,7 @@
     import { structures } from '../game/structures';
     import Minimap from './Minimap.svelte';
     import { getContext } from 'svelte';
+    import InstructionsTab from './InstructionsTab.svelte';
     
     const dispatch = createEventDispatcher();
     
@@ -26,6 +27,20 @@
     let generationsPerRound: number = 50;
     let isRoundActive: boolean = false;
     let isRoundTransitioning: boolean = false;
+
+    let activeTab = 'basics';
+
+    const tabs = [
+        { id: 'basics', label: 'Basics' },
+        { id: 'structures', label: 'Structures' },
+        { id: 'enemies', label: 'Enemies' },
+        { id: 'tips', label: 'Tips' },
+        { id: "chaos", label: "Chaos Mode" }
+    ];
+
+    function setActiveTab(tab: string) {
+        activeTab = tab;
+    }
 
     onMount(() => {
         EventBus.on('game-over', () => {
@@ -94,7 +109,7 @@
     }
     
     function returnToMenu() {
-        EventBus.emit('returnToMenu');
+      dispatch('closeGame');
     }
     
     function toggleInstructions() {
@@ -202,15 +217,19 @@
             <div class="instructions-window">
                 <button class="close-button" on:click={toggleInstructions}>×</button>
                 <h2>Game Rules</h2>
-                <ul>
-                    <li>Press SPACE to toggle simulation on and off.</li>
-                    <li>The game starts with 3 pulsars, as your base.</li>
-                    <li>Every pulsar generates 1 cell every 15 generations.</li>
-                    <li>You start with 100 cells.</li>
-                    <li>Use generated cells to build structures from the bottom panel.</li>
-                    <li>Red enemy snakes are emerging, trying to destroy your base.</li>
-                    <li>Good luck</li>
-                </ul>
+                <div class="tabs">
+                    {#each tabs as tab}
+                        <button 
+                            class:active={activeTab === tab.id} 
+                            on:click={() => setActiveTab(tab.id)}
+                        >
+                            {tab.label}
+                        </button>
+                    {/each}
+                </div>
+                <div class="tab-content">
+                    <InstructionsTab {activeTab} />
+                </div>
             </div>
         </div>
     {/if}
@@ -543,7 +562,60 @@
     font-size: 0.9em;
 }
 
+.tabs {
+    display: flex;
+    justify-content: space-around;
+    margin-bottom: 20px;
+}
+
+.tabs button {
+    background: none;
+    border: none;
+    color: #00ff00;
+    cursor: pointer;
+    font-family: 'VT323', monospace;
+    font-size: 1.2rem;
+    padding: 10px;
+    transition: all 0.3s ease;
+}
+
+.tabs button:hover {
+    color: #ffffff;
+}
+
+.tabs button.active {
+    border-bottom: 2px solid #00ff00;
+}
+
+.tab-content {
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-right: 15px;
+    scrollbar-width: thin;
+    scrollbar-color: #00ff00 #000000;
+}
+
+.tab-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.tab-content::-webkit-scrollbar-track {
+    background: #000000;
+}
+
+.tab-content::-webkit-scrollbar-thumb {
+    background-color: #00ff00;
+    border-radius: 4px;
+    border: 2px solid #000000;
+}
+
+.tab-content::-webkit-scrollbar-thumb:hover {
+    background-color: #00cc00;
+}
 </style>
+
+
+
 
 
 
